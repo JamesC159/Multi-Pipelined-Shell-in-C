@@ -141,12 +141,14 @@ int getInput(char **buffer)
         exit(EXIT_FAILURE);
     }
     
+    printf("Enter Command: ");
     bytesRead = getline(&(*buffer), &numBytes, stdin);
     if (bytesRead < 0)
     {
         fprintf(stderr, "Error reading input\n");
         return -1;
     }
+    printf("\n");
     
     return 0;
 }
