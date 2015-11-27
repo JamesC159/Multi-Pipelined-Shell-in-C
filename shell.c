@@ -108,6 +108,8 @@ int main (int argc, char *argv[])
                 token = strtok(NULL, " ");
             }
             j = 0;
+            
+            free(token);
         }
         
         /* run the multipipelined command shell */
@@ -305,6 +307,7 @@ int parseTokens(char **tokens, int numTokens)
         fflush(NULL);
     }
     
+    free(tokenHolder);
     return numPipes;
 }
 
