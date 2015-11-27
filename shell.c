@@ -32,7 +32,7 @@ int getInput(char **);
 int parseTokens(char **, int);
 int createCommands(struct command **, char **, int);
 int spawnProcess(int, int, struct command *);
-void pipeline (struct command *, int);
+int pipeline (struct command *, int);
 void closeFD(int);
 void redirect (int, int);
 char ** tokenize(char *, int *);
@@ -43,7 +43,7 @@ char ** tokenize(char *, int *);
 int main (int argc, char *argv[])
 {
     char *buf;      // Contains input from stdin
-    struct command cmds[BUFSIZ];
+    struct command cmds[sizeof(struct command) * BUFSIZ];
     int result;
     int numPipes = 0;
     
@@ -121,9 +121,8 @@ int main (int argc, char *argv[])
         {
             free(cmds[i].argv);
         }
+        free(buf);
     }
-    
-    free(buf);
 }
 
 /***********************************************************
@@ -316,7 +315,7 @@ int parseTokens(char **tokens, int numTokens)
 /***********************************************************
  *  Implementation of multi-pipelined shell
  **********************************************************/
-void pipeline(struct command *cmds, int numPipes)
+int pipeline(struct command *cmds, int numPipes)
 {
     int status;
     int i;
@@ -345,29 +344,31 @@ void pipeline(struct command *cmds, int numPipes)
             redirect(in, STDIN_FILENO);
             redirect(fd[1], STDOUT_FILENO);
             
-            execvp(cmds[i].argv[0], (char * const *)cmds[i].argv);
+            return execvp(cmds[i].argv[0], (char * const *)cmds[i].argv);
         }
         else    // Parent
         {
             assert(pid > 0);
-            
-            close(fd[1]);
-            close(in);
+            closeFD(fd[1]);
+            closeFD(in);
             in = fd[0];
-            
-            wait(&status);
         }
     }
     
+    // Need to implement something of the sort for I/O redirection
     //if (file_fd != 1) { dup2(file_fd, 1); close(file_fd); }
     
     redirect(in, STDIN_FILENO);
     redirect(STDOUT_FILENO,STDOUT_FILENO);
     
-    wait(&status);
+    /* Not sure if this is the correct place - It works though */
+    for (i = 0; i < numPipes; i++)
+    {
+        wait(NULL);
+    }
     
     /* Execute the last stage with the current process. */
-    execvp (cmds[i].argv[0], (char * const *)cmds[i].argv);
+    return execvp (cmds[i].argv[0], (char * const *)cmds[i].argv);
 }
 
 /***********************************************************
