@@ -110,7 +110,7 @@ int main (int argc, char *argv[])
             j = 0;
         }
         
-        /* Implement the single command shell */
+        /* run the multipipelined command shell */
         pipeline(cmds, numPipes);
         
         free(tokens);
