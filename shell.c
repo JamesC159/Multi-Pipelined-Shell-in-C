@@ -44,10 +44,7 @@ int main (int argc, char *argv[])
 {
     char *buf;      // Contains input from stdin
     struct command cmds[BUFSIZ];
-    pid_t forkResult;
-    int status;
     int result;
-    int isReading = 1;
     int numPipes = 0;
     
     while ((result = getInput(&buf)) != -1)
@@ -162,7 +159,6 @@ char ** tokenize(char *command, int *numTokens)
     char **tokens = malloc(sizeof(char) * BUFSIZ);
     char *token;
     int pos = 0;
-    int i;
     int buffersize = BUFSIZ;
     
     if (!tokens)
@@ -216,7 +212,7 @@ int parseTokens(char **tokens, int numTokens)
 {
     int i, j;
     int numPipes = 0;
-    int hasOptions = 0, hasPipe = 0, isFirstCommand = 1, cmdAfterPipe = 0;
+    int hasPipe = 0, isFirstCommand = 1, cmdAfterPipe = 0;
     int hasColon = 0, cmdAfterColon = 0, hasRedirection = 0, fileAfterRed = 0;
     char *tokenHolder = malloc(sizeof(char) * BUFSIZ);
         
@@ -317,9 +313,7 @@ int parseTokens(char **tokens, int numTokens)
  **********************************************************/
 void pipeline(struct command *cmds, int numPipes)
 {
-    pid_t pid;
     int status;
-    int fd[2];   // Each pipe has 2 file descriptors
     int i;
     int in = STDIN_FILENO;
     
