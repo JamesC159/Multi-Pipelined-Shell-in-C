@@ -6,6 +6,7 @@
 //
 //
 
+#include <unistd.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -14,28 +15,28 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
-#include <unistd.h>
-#include <regex.h>
+#include <fcntl.h>
 
 /***********************************************************
  *  Structures
  **********************************************************/
-struct command
+typedef struct command
 {
     char **argv;
-};
+	//char *fileIn, *fileOut;
+	//int redirectIn, redirectOut;
+	//int fdIn, fdOut;
+} CMD; 
 
 /***********************************************************
  *  Function Prototypes
  **********************************************************/
+char ** tokenize(char *, int *);
 int getInput(char **);
 int parseTokens(char **, int);
-int createCommands(struct command **, char **, int);
-int spawnProcess(int, int, struct command *);
-int pipeline (struct command *, int);
+int pipeline (CMD *, int, int);
 void closeFD(int);
 void redirect (int, int);
-char ** tokenize(char *, int *);
 
 /***********************************************************
  *  Main Function
@@ -43,7 +44,7 @@ char ** tokenize(char *, int *);
 int main (int argc, char *argv[])
 {
     char *buf;      // Contains input from stdin
-    struct command cmds[sizeof(struct command) * BUFSIZ];
+	CMD cmds[sizeof(CMD) * BUFSIZ];
     int result;
     int numPipes = 0;
     
@@ -59,41 +60,47 @@ int main (int argc, char *argv[])
             creating the commands */
         int i, j;
         int numCmds = 0;
-        char **tempV = malloc (sizeof(char) * BUFSIZ);
+        char **tempV = malloc (sizeof(char) * BUFSIZ);	// Temp vector to holder commands
         j = 0;
         
         /* Setup commands */
         for (i = 0; i < numTokens; i++)
         {
-            char *temp = malloc (sizeof(char) * BUFSIZ);
+            char *temp = malloc (sizeof(char) * BUFSIZ);	// Temp buffer to hold a command
             
             strcpy(temp, "");
-            while (tokens[i] != NULL && tokens[i][0] != '|')
-            {
-                strcat(temp, tokens[i]);
-                strcat(temp, " ");
-                i++;
-            }
+
+			/* Ignore pipes and redirections 
+				Loop until we hit a pipe, redirection or no more tokens 
+				setup up the temp buffer with a command */
+			while (tokens[i] != NULL && tokens[i][0] != '|'
+				&& tokens[i][0] != '<' && tokens[i][0] != '>')
+			{
+				strcat(temp, tokens[i]);
+				strcat(temp, " ");
+				i++;
+			}
             
-            tempV[j] = temp;
-            tempV[j][strlen(temp)] = NULL;
+            tempV[j] = temp;	// Add the command to the temp vector
+            tempV[j][strlen(temp)] = NULL;	// Set the last character in the command to NULL
             j++;
             numCmds++;
         }
+
         j = 0;
         
-        /* Allocate space for the vectors in the command structure */
+        /* Allocate space for the argument vectors in the command structure */
         for (i = 0; i < numCmds; i++)
         {
             cmds[i].argv = malloc(sizeof(char) * BUFSIZ);
         }
         
-        /* Add the tokens to the vectors in command structure */
+        /* Add the tokens to the argument vectors in command structure */
         for (i = 0; i < numCmds; i++)
         {
             char *token = strtok(tempV[i], " ");
             while (token != NULL)
-            {
+			{
                 cmds[i].argv[j] = token;
                 
                 /* get rid of the newline character */
@@ -107,22 +114,27 @@ int main (int argc, char *argv[])
                 j++;
                 token = strtok(NULL, " ");
             }
+
             j = 0;
             
             free(token);
         }
         
         /* run the multipipelined command shell */
-        pipeline(cmds, numPipes);
+        pipeline(cmds, numPipes, numCmds);
         
-        free(tokens);
-        free(tempV);
+		/* Free Memory */
         for (i = 0; i < numCmds; i++)
         {
             free(cmds[i].argv);
+			free(tempV[i]);
         }
+		free(tokens);
+		free(tempV);
         free(buf);
     }
+
+	exit(EXIT_SUCCESS);
 }
 
 /***********************************************************
@@ -210,6 +222,7 @@ char ** tokenize(char *command, int *numTokens)
  *  Parses the tokens processed by tokenize()
  *  Also counts the number of pipes it comes accross
  *  And returns the number of pipes it found
+ *	JUST FOR DISPLAY IN THE ASSIGNMENT
  **********************************************************/
 int parseTokens(char **tokens, int numTokens)
 {
@@ -315,10 +328,9 @@ int parseTokens(char **tokens, int numTokens)
 /***********************************************************
  *  Implementation of multi-pipelined shell
  **********************************************************/
-int pipeline(struct command *cmds, int numPipes)
+int pipeline(CMD *cmds, int numPipes, int numCmds)
 {
-    int status;
-    int i;
+	int i;
     int in = STDIN_FILENO;
     
     /* Loop for number of pipes */
@@ -358,6 +370,7 @@ int pipeline(struct command *cmds, int numPipes)
     // Need to implement something of the sort for I/O redirection
     //if (file_fd != 1) { dup2(file_fd, 1); close(file_fd); }
     
+	/* Close rest of open file descriptors*/
     redirect(in, STDIN_FILENO);
     redirect(STDOUT_FILENO,STDOUT_FILENO);
     
