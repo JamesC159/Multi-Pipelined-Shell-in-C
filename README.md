@@ -6,6 +6,7 @@ To compile this code on a UNIX machine, type in terminal 'make -f Makefile' and 
 To clean up the object files and executables, type in the terminal 'make clean'
 
 #Current Problems:
-Input should loop and continue infinitely until pressing ctrl-c to end the program. Although, current implementation does not accomplish this. If you have a solution, feel free to let me know
+Input should loop and continue infinitely until pressing ctrl-c to end the program. Although, current implementation does not accomplish this. If you have a solution, feel free to let me know. 
 File I/O redirection for commands in the pipeline has not been implemented yet.
-example: ls -l | wc -c > output.txt    Will not work. If you have a solution, feel free to let me know
+example: ls -l | wc -c > output.txt    Will not work. If you have a solution, feel free to let me know.
+Shell hangs when typing single grep command such as 'grep driver' but works when you pipe it.
