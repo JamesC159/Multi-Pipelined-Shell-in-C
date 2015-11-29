@@ -24,7 +24,7 @@ typedef struct command
 {
 	char **argv;
 	int fdIn, fdOut;
-	int numRedirections;
+	int numRedirections, numCmdTokens;
 
 } CMD;
 
@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
 		char **tempV = malloc(sizeof(char) * BUFSIZ);	// Temp vector to holder commands
 		j = 0;
 
+
 		/* Setup commands */
 		for (i = 0; i < numTokens; i++)
 		{
@@ -74,8 +75,7 @@ int main(int argc, char *argv[])
 			/* Ignore pipes and redirections
 				Loop until we hit a pipe, redirection or no more tokens
 				setup up the temp buffer with a correct command */
-			while (tokens[i] != NULL && tokens[i][0] != '|'
-				&& tokens[i][0] != '<' && tokens[i][0] != '>')
+			while (tokens[i] != NULL && tokens[i][0] != '|')
 			{
 				strcat(temp, tokens[i]);
 				strcat(temp, " ");
@@ -90,10 +90,13 @@ int main(int argc, char *argv[])
 
 		j = 0;
 
-		/* Allocate space for the argument vectors in the command structure */
+		/* Allocate space for the argument vectors in the command structure
+		and initialize some variables */
 		for (i = 0; i < numCmds; i++)
 		{
 			cmds[i].argv = malloc(sizeof(char) * BUFSIZ);
+			cmds[i].numCmdTokens = 0;
+			cmds[i].numRedirections = 0;
 		}
 
 		/* Add the tokens to the argument vectors in command structure */
@@ -103,6 +106,7 @@ int main(int argc, char *argv[])
 			while (token != NULL)
 			{
 				cmds[i].argv[j] = token;
+				cmds[i].numCmdTokens++;
 
 				/* get rid of the newline character */
 				if (cmds[i].argv[j][strlen(token) - 1] == '\n')
@@ -119,6 +123,38 @@ int main(int argc, char *argv[])
 			j = 0;
 
 			free(token);
+		}
+
+		/* Look for redirection symbols in the argument vectors */
+		for (i = 0; i < numCmds; i++)
+		{
+			for (j = 0; j < cmds[i].numCmdTokens; j++)
+			{
+				if (strcmp(cmds[i].argv[j], "<") == 0)
+				{
+					/* Open input file if it exists */
+					if ((cmds[i].fdIn = open(cmds[i].argv[j + 1], O_RDONLY)) == -1)
+					{
+						perror(cmds[i].argv[j + 1]);
+						exit(EXIT_FAILURE);
+					}
+
+					cmds[i].argv[j] = NULL;
+					cmds[i].numRedirections++;
+				}
+				else if (strcmp(cmds[i].argv[j], ">") == 0)
+				{
+					/* open output file. if it doesnt exist, create it. */
+					if ((cmds[i].fdOut = open(cmds[i].argv[j + 1], O_WRONLY | O_CREAT | O_TRUNC)) == -1)
+					{
+						perror(cmds[i].argv[j + 1]);
+						exit(EXIT_FAILURE);
+					}
+
+					cmds[i].argv[j] = NULL;
+					cmds[i].numRedirections++;
+				}
+			}
 		}
 
 		/* run the multipipelined command shell */
@@ -337,16 +373,31 @@ int pipeline(CMD *cmds, int numPipes, int numCmds)
 			perror("pipe");
 			exit(EXIT_FAILURE);
 		}
-		else if ((pid = fork()) == -1)
+
+		if ((pid = fork()) == -1)
 		{
 			perror("fork");
 			exit(EXIT_FAILURE);
 		}
-		else if (pid == 0)   // Child
+
+		if (pid == 0)   // Child
 		{
 			closeFD(fd[0]);
-			redirect(in, STDIN_FILENO);
-			redirect(fd[1], STDOUT_FILENO);
+			if (cmds[i].fdIn && cmds[i].fdIn != STDIN_FILENO)
+			{
+				redirect(in, cmds[i].fdIn);
+				redirect(fd[1], STDOUT_FILENO);
+			}
+			else if (cmds[i].fdOut && cmds[i].fdOut != STDOUT_FILENO)
+			{
+				redirect(in, STDIN_FILENO);
+				redirect(cmds[i].fdOut, STDOUT_FILENO);
+			}
+			else
+			{
+				redirect(in, STDIN_FILENO);
+				redirect(fd[1], STDOUT_FILENO);
+			}
 
 			return execvp(cmds[i].argv[0], (char * const *)cmds[i].argv);
 		}
@@ -362,7 +413,31 @@ int pipeline(CMD *cmds, int numPipes, int numCmds)
 	// Need to implement something of the sort for I/O redirection
 	//if (file_fd != 1) { dup2(file_fd, 1); close(file_fd); }
 
-	/* Close rest of open file descriptors*/
+	/* Redirect file descriptors one more time */
+	for (i = 0; i < numCmds; i++)
+	{
+		if (cmds[i].fdIn && cmds[i].fdIn != STDIN_FILENO)
+		{
+			redirect(in, cmds[i].fdIn);
+			redirect(STDOUT_FILENO, STDOUT_FILENO);
+			for (i = 0; i < numPipes; i++)
+			{
+				wait(NULL);
+			}
+			return execvp(cmds[i].argv[0], (char * const *)cmds[i].argv);
+		}
+		else if (cmds[i].fdOut && cmds[i].fdOut != STDOUT_FILENO)
+		{
+			redirect(in, STDIN_FILENO);
+			redirect(cmds[i].fdOut, STDOUT_FILENO);
+			for (i = 0; i < numPipes; i++)
+			{ 
+				wait(NULL);
+			}
+			return execvp(cmds[i].argv[0], (char * const *)cmds[i].argv);
+		}
+	}
+
 	redirect(in, STDIN_FILENO);
 	redirect(STDOUT_FILENO, STDOUT_FILENO);
 
